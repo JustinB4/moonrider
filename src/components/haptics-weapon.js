@@ -12,7 +12,7 @@ AFRAME.registerComponent('haptics-weapons', {
     this.isColliding = false;
     this.tick = AFRAME.utils.throttleTick(this.tick.bind(this), 100);
 
-    el.setAttribute('haptics__weapon', {dur: 100, force: 0.075});
+    el.setAttribute('haptics__weapon', {dur: 200, force: 0.075});
 
     el.addEventListener('mouseenter', evt => {
       if (!evt.detail || !evt.detail.intersectedEl || !this.data.enabled) { return; }
