@@ -4,7 +4,7 @@ AFRAME.registerComponent('stars', {
   schema: {
     color: {type: 'color', default: COLORS.initial.secondary},
     count: {default: 500},
-    radius: {default: 500}
+    radius: {default: 300}
   },
 
   init: function () {

@@ -1,4 +1,5 @@
 const algoliasearch = require('algoliasearch/lite');
+const debounce = require('lodash.debounce');
 
 const client = algoliasearch('QULTOY3ZWU', 'be07164192471df7e97e6fa70c1d041d');
 const algolia = client.initIndex('beatsaver');
@@ -22,7 +23,8 @@ AFRAME.registerComponent('search', {
   init: function () {
     this.eventDetail = {query: '', results: topSearch};
     this.keyboardEl = document.getElementById('keyboard');
-    this.popularHits = null;
+    this.popularHits = topSearch;
+    shuffle(this.popularHits);
     this.queryObject = {hitsPerPage: 0, query: ''};
     this.el.sceneEl.addEventListener('searchclear', () => { this.search(''); });
   },
@@ -37,6 +39,8 @@ AFRAME.registerComponent('search', {
       this.keyboardEl.components['super-keyboard'].data.value = '';
       this.keyboardEl.components['super-keyboard'].updateTextInput('');
     }
+
+    this.debouncedSearch = debounce(this.search.bind(this), 1000);
   },
 
   play: function () {
@@ -50,7 +54,7 @@ AFRAME.registerComponent('search', {
   events: {
     superkeyboardchange: function (evt) {
       if (evt.target !== this.el) { return; }
-      this.search(evt.detail.value);
+      this.debouncedSearch(evt.detail.value);
     }
   },
 
@@ -100,22 +104,16 @@ AFRAME.registerComponent('search', {
       delete this.queryObject.filters;
     }
 
+    if (query && query.length < 3) { return; }
+
     algolia.search(this.queryObject, (err, content) => {
-      // Cache popular hits.
       if (err) {
         this.el.sceneEl.emit('searcherror', null, false);
         console.error(err);
         return;
       }
 
-      if (!query && this.data.difficultyFilter === 'All' &&
-          !this.data.genre && !this.data.playlist) {
-        this.popularHits = topSearch.concat(content.hits);
-        shuffle(this.popularHits);
-        this.eventDetail.results = this.popularHits;
-      } else {
-        this.eventDetail.results = content.hits;
-      }
+      this.eventDetail.results = content.hits;
 
       this.el.sceneEl.emit('searchresults', this.eventDetail);
     });

@@ -1,7 +1,9 @@
 const firebase = require('firebase/app');
+const pr = require('profane-words');
 require('firebase/firestore');
 
 const NUM_SCORES_DISPLAYED = 10;
+const ba = /(fuc)|(ass)|(nig)|(shit)|(retard)/gi;
 
 /**
  * High score with Firebase cloud store.
@@ -17,6 +19,7 @@ AFRAME.registerComponent('leaderboard', {
     messagingSenderId: {type: 'string'},
 
     challengeId: {default: ''},
+    difficulty: {default: ''},
     inVR: {default: false},
     gameMode: {type: 'string'},
     menuSelectedChallengeId: {default: ''},
@@ -57,13 +60,20 @@ AFRAME.registerComponent('leaderboard', {
       this.checkLeaderboardQualify();
     }
 
+    if (this.data.difficulty && oldData.difficulty !== this.data.difficulty) {
+      this.fetchScores(this.data.menuSelectedChallengeId);
+      return;
+    }
+
     if (this.data.menuSelectedChallengeId &&
         oldData.menuSelectedChallengeId !== this.data.menuSelectedChallengeId) {
       this.fetchScores(this.data.menuSelectedChallengeId);
+      return;
     }
 
     if (this.data.challengeId && oldData.challengeId !== this.data.challengeId) {
       this.fetchScores(this.data.challengeId);
+      return;
     }
   },
 
@@ -78,10 +88,15 @@ AFRAME.registerComponent('leaderboard', {
       gameMode: this.data.gameMode,
       score: state.score.score,
       username: this.username,
-      difficulty: state.challenge.difficulty,
+      difficulty: this.data.difficulty || state.challenge.difficulty,
       time: new Date()
     };
-    this.db.add(scoreData);
+
+    if (!pr.includes(this.username.toLowerCase()) &&
+        !this.username.match(ba)) {
+      this.db.add(scoreData);
+    }
+
     this.addEventDetail.scoreData = scoreData;
     this.el.emit('leaderboardscoreadded', this.addEventDetail, false);
   },
@@ -119,6 +134,8 @@ AFRAME.registerComponent('leaderboard', {
   checkLeaderboardQualify: function () {
     const state = this.el.sceneEl.systems.state.state;
     const score = state.score.score;
+
+    if (AFRAME.utils.getUrlParameter('dot')) { return; }
 
     // If less than 10, then automatic high score.
     if (this.scores.length < NUM_SCORES_DISPLAYED) {

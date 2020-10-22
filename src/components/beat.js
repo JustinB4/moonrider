@@ -6,9 +6,8 @@ const bbox = new THREE.Box3();
 const otherBbox = new THREE.Box3();
 const collisionZThreshold = -1.65;
 
-const ANGLE_MAX_SUPER = THREE.Math.degToRad(10);
-const ANGLE_THRESHOLD = THREE.Math.degToRad(40);
-const CUT_THICKNESS = 0.02;
+const ANGLE_DOT_SUPER = 0.97;  // ~15-degrees.
+const ANGLE_DOT_MIN = 0.625;  // ~50-degrees.
 const WARMUP_TIME = 2000;
 const WARMUP_ROTATION_CHANGE = 2 * Math.PI;
 
@@ -106,7 +105,7 @@ AFRAME.registerComponent('beat-system', {
 
     if (oldData.isLoading && !this.data.isLoading) {
       this.updateBeatPositioning();
-      this.weaponOffset = this.data.gameMode === CLASSIC ? SWORD_OFFSET : PUNCH_OFFSET;
+      this.weaponOffset = this.data.gameMode === CLASSIC ? SWORD_OFFSET * 1.15 : PUNCH_OFFSET;
       this.weaponOffset = this.weaponOffset / this.supercurve.curve.getLength();
     }
 
@@ -178,11 +177,10 @@ AFRAME.registerComponent('beat-system', {
       return;
     }
 
+    // Successful hit, let the beat handle further processing.
     const correctWeapon = WEAPON_COLORS[weapon1.el.dataset.hand] === beat.data.color
       ? weapon1
       : weapon2;
-
-    // Successful hit, let the beat handle further processing.
     if (correctWeapon.checkCollision(beat)) {
       beat.onHit(correctWeapon.el);
       return;
@@ -191,6 +189,15 @@ AFRAME.registerComponent('beat-system', {
     // If not successful hit, check if mismatched hit.
     const wrongWeapon = correctWeapon === weapon1 ? weapon2 : weapon1;
     if (wrongWeapon.checkCollision(beat)) {
+      // Minimum speed for wrong beat.
+      if (this.data.gameMode === 'classic' && wrongWeapon.strokeSpeed < 15) {
+        return;
+      }
+
+      if (this.data.gameMode === 'punch' && wrongWeapon.speed < 2) {
+        return;
+      }
+
       beat.onHit(wrongWeapon.el, true);
       beat.destroyBeat(wrongWeapon.el, false);
     }
@@ -281,7 +288,6 @@ AFRAME.registerComponent('beat', {
     this.poolName = undefined;
     this.returnToPoolTimer = DESTROY_TIME;
     this.rotationAxis = new THREE.Vector3();
-    this.shadow = null;
     this.superCutIdx = 0;
     this.startPositionZ = undefined;
     this.warmupTime = 0;
@@ -344,7 +350,8 @@ AFRAME.registerComponent('beat', {
     }
 
     // Check if past the camera to return to pool.
-    if (el.object3D.position.z > this.curveFollowRig.object3D.position.z) {
+    const returnDistance = this.data.type === 'mine' ? 0.25 : 1.25;
+    if ((el.object3D.position.z - returnDistance) > this.curveFollowRig.object3D.position.z) {
       this.returnToPool();
       this.missHit();
     }
@@ -354,7 +361,7 @@ AFRAME.registerComponent('beat', {
    * Called when summoned by beat-generator.
    * Called after updatePosition.
    */
-  onGenerate: function (songPosition, horizontalPosition, verticalPosition, cutDirection) {
+  onGenerate: function (songPosition, horizontalPosition, verticalPosition, cutDirection, heightOffset) {
     const data = this.data;
     const el = this.el;
 
@@ -392,14 +399,6 @@ AFRAME.registerComponent('beat', {
       el.object3D.rotation.z = THREE.Math.degToRad(ROTATIONS[cutDirection]);
     }
 
-    // Shadow.
-    // this.shadow = this.el.sceneEl.components['pool__beat-shadow'].requestEntity();
-    if (this.shadow) {
-      this.shadow.object3D.visible = true;
-      this.shadow.object3D.position.copy(el.object3D.position);
-      this.shadow.object3D.position.y += 0.05;
-    }
-
     // Set up rotation warmup.
     this.rotationStart = el.object3D.rotation.y;
     this.rotationChange = WARMUP_ROTATION_CHANGE;
@@ -409,7 +408,7 @@ AFRAME.registerComponent('beat', {
     const offset = 0.5;
     el.object3D.position.y -= offset;
     this.positionStart = el.object3D.position.y;
-    this.positionChange = this.verticalPositions[verticalPosition] + offset;
+    this.positionChange = this.verticalPositions[verticalPosition] + offset + heightOffset;
   },
 
   /**
@@ -427,7 +426,12 @@ AFRAME.registerComponent('beat', {
     blockEl.setAttribute('materials', 'name', 'beat');
     const mesh = blockEl.getObject3D('mesh');
     mesh.geometry.computeBoundingBox();
+
     this.bbox = mesh.geometry.boundingBox;
+
+    if (this.data.type === 'mine') {
+      this.bbox.expandByScalar(-0.25);
+    }
   },
 
   wrongHit: function () {
@@ -473,12 +477,6 @@ AFRAME.registerComponent('beat', {
       this.broken.emit('explode', this.explodeEventDetail, false);
     }
 
-    if (this.shadow) {
-      this.el.sceneEl.components['pool__beat-shadow'].returnEntity(this.shadow);
-      this.shadow.object3D.visible = false;
-      this.shadow = null;
-    }
-
     if (this.beatSystem.data.gameMode === CLASSIC && correctHit) {
       weaponEl.components.trail.pulse();
     }
@@ -492,18 +490,17 @@ AFRAME.registerComponent('beat', {
     this.el.object3D.position.set(0, 0, -9999);
     this.el.object3D.visible = false;
     this.el.sceneEl.components[this.poolName].returnEntity(this.el);
-    if (this.shadow) {
-      this.el.sceneEl.components['pool__beat-shadow'].returnEntity(this.shadow);
-      this.shadow.object3D.visible = false;
-      this.shadow = null;
-    }
   },
 
   onHit: function (weaponEl, wrongHit) {
     const data = this.data;
 
     // Haptics.
-    weaponEl.components.haptics__beat.pulse();
+    try{
+      weaponEl.components.haptics__beat.pulse();
+    } catch (err){
+      console.log(err);
+    }
 
     // Sound.
     this.el.parentNode.components['beat-hit-sound'].playSound(this.el, this.cutDirection);
@@ -521,18 +518,18 @@ AFRAME.registerComponent('beat', {
 
     // Do blade-related checks.
     if (this.beatSystem.data.gameMode === CLASSIC) {
-      let angle = 0;
+      let dot = 0;
       if (data.type === 'arrow') {
         const blade = weaponEl.components.blade;
-        angle = blade.strokeDirectionVector.angleTo(CUT_DIRECTION_VECTORS[this.cutDirection]);
-        if (angle > ANGLE_THRESHOLD) {
+        dot = blade.strokeDirectionVector.dot(CUT_DIRECTION_VECTORS[this.cutDirection]);
+        if (dot < ANGLE_DOT_MIN) {
           this.destroyBeat(weaponEl, false);
           this.wrongHit();
           return;
         }
       }
       this.destroyBeat(weaponEl, true);
-      this.calculateScoreBlade(weaponEl, angle);
+      this.calculateScoreBlade(weaponEl, dot);
       return;
     }
 
@@ -547,46 +544,54 @@ AFRAME.registerComponent('beat', {
    * Emit score and show score effects.
    * Called by multiple modes (blade, punch).
    */
-  score: function (score) {
+  score: function (score, percent) {
     const el = this.el;
     const hitEventDetail = this.hitEventDetail;
+
+    score = Math.ceil(parseInt(score, 10) / 10) * 10;
+    hitEventDetail.percent = percent;
     hitEventDetail.score = score;
     this.queueBeatHitEvent = hitEventDetail;
 
-    /*
     // Super FX.
-    if (score > 80) {
+    if (percent >= 100) {
       this.superCuts[this.superCutIdx].components.supercutfx.createSuperCut(
       el.object3D, this.data.color);
       this.superCutIdx = (this.superCutIdx + 1) % this.superCuts.length;
     }
-    */
   },
 
   /**
    * Blade scoring.
    */
-  calculateScoreBlade: function (bladeEl, angle) {
-    // 70% score on speed.
-    let SUPER_SCORE_SPEED = 10;
-    if (this.cutDirection === 'down') {
-      SUPER_SCORE_SPEED = 22;
-    }
+  calculateScoreBlade: function (bladeEl, angleDot) {
+    const SUPER_SCORE_SPEED = 10;
     const speed = bladeEl.components.blade.strokeSpeed;
-    let score = (Math.min((speed / SUPER_SCORE_SPEED) * 100, 100) / 100) * 70;
+    const speedScore = (bladeEl.components.blade.strokeSpeed / SUPER_SCORE_SPEED) * 30;
 
-    // 30% score on direction.
-    if (this.data.type === DOT) {
-      score += 20;
+    let score;
+    if (speed <= SUPER_SCORE_SPEED) {
+      score = Math.min(speedScore, 30);
     } else {
-      if (angle < ANGLE_MAX_SUPER) {
-        score += 20;
+      score = remap(clamp(speed, 10, 25), 10, 25, 30, 50);
+    }
+
+    let percent = Math.min(speedScore, 30);
+
+    // 70% score on direction.
+    if (this.data.type === DOT) {
+      score += 70;
+      percent += 70;
+    } else {
+      score += angleDot * 70;
+      if (angleDot > ANGLE_DOT_SUPER) {
+        percent += 70;
       } else {
-        score += ((ANGLE_THRESHOLD - angle) / ANGLE_THRESHOLD) * 30;
+        percent += angleDot * 70;
       }
     }
 
-    this.score(Math.round(score));
+    this.score(score, percent);
   },
 
   /**
@@ -594,12 +599,21 @@ AFRAME.registerComponent('beat', {
    * More points scored if punching straight down the curve.
    */
   calculateScorePunch: function (punchEl) {
-    // Get 60% of the score just by hitting the beat.
-    let score = 60;
-    const SUPER_SCORE_SPEED = 4;
+    const base = 60;  // Get 60% of the score just by hitting the beat.
+
+    const SUPER_SCORE_SPEED = 1.5;
     const speed = punchEl.components.punch.speed;
-    score += Math.min((speed / SUPER_SCORE_SPEED), 1) * 40;
-    this.score(score);
+    const speedScore = (speed / SUPER_SCORE_SPEED) * 40;
+
+    let score;
+    if (speed <= SUPER_SCORE_SPEED) {
+      score = base + Math.min(speedScore, 40);
+    } else {
+      score = base + remap(clamp(speed, 1.5, 6), 1.5, 6, 40, 70);
+    }
+
+    const percent = base + Math.min(speedScore, 40);
+    this.score(score, percent);
   },
 
   /**
@@ -610,6 +624,7 @@ AFRAME.registerComponent('beat', {
     this.destroyBeat(weaponEl, Math.random() < 0.9);
     el.parentNode.components['beat-hit-sound'].playSound(el, this.cutDirection);
     const hitEventDetail = this.hitEventDetail;
+    hitEventDetail.percent = 100;
     hitEventDetail.score = 100;
     this.queueBeatHitEvent = hitEventDetail;
   }
@@ -662,3 +677,11 @@ function elastic (amplitude, period) {
        Math.asin(1 / a))) * (Math.PI * 2)) / p);
   }
 }
+
+function remap (value, low1, high1, low2, high2) {
+  return low2 + (high2 - low2) * (value - low1) / (high1 - low1);
+}
+
+function clamp (val, min, max) {
+  return Math.min(Math.max(val, min), max);
+};

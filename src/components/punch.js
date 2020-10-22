@@ -24,15 +24,12 @@ AFRAME.registerComponent('punch', {
   tick: function (time, dt) {
     if (!this.data.enabled) { return; }
 
-    if ((time - this.lastSampleTime) < 50) { return; }
-
     // Calculate velocity (direction + speed), m/s.
     this.direction = this.currentPos
       .copy(this.el.object3D.position)
       .sub(this.lastSample)
 
     this.speed = this.direction.length() / ((time - this.lastSampleTime) / 1000);
-    this.rig.object3D.localToWorld(this.direction);
 
     this.lastSample.copy(this.el.object3D.position);
     this.lastSampleTime = time;
@@ -45,9 +42,10 @@ AFRAME.registerComponent('punch', {
 
   checkCollision: (function () {
     const box = new THREE.Box3();
+    const expand = new THREE.Vector3(0, 0, 0.2);
 
     return function (beat) {
-      box.copy(beat.bbox).translate(beat.el.object3D.position).expandByScalar(0.1);
+      box.copy(beat.bbox).translate(beat.el.object3D.position).expandByScalar(0.1).expandByVector(expand);
       return this.bbox.intersectsBox(box);
     };
   })()

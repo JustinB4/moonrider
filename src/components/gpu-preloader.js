@@ -11,7 +11,6 @@ AFRAME.registerComponent('gpu-preloader', {
     setTimeout(() => {
       this.preloadFromSelector('#mainLogo');
       this.preloadFromSelector('#prevArrow');
-      this.preloadFromSelector('#soundboxingButton');
       this.preloadFromSelector('#stepback');
       this.preloadFromSelector('.difficultyBackground');
       this.preloadFromSelector('.genreIcon');
@@ -51,7 +50,7 @@ AFRAME.registerComponent('gpu-preloader', {
   },
 
   preloadEnvMap: function () {
-    const wall = document.querySelector('#beatContainer [wall]');
+    const wall = document.querySelector('#wallContainer [wall]');
     this.preloadTexture(wall.components.material.material.uniforms.environment.value);
   },
 

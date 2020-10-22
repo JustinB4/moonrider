@@ -6,7 +6,7 @@
     "deploy": "npm run predeploy && ghpages git@github.com:supermedium/moonrider.git -p .ghpages && rm -rf .ghpages",
     "lint": "semistandard -v | snazzy",
     "lint:fix": "semistandard --fix",
-    "predeploy": "NODE_ENV=production npm run build && shx mkdir -p .ghpages && cp -r index.html assets build vendor CNAME .ghpages",
+    "predeploy": "cross-env NODE_ENV=production npm run build && shx mkdir -p .ghpages && cp -r index.html assets build vendor CNAME .ghpages",
     "start": "webpack-dev-server --host 0.0.0.0 --progress --colors --hot-only --inline --port 3000"
   },
   "dependencies": {
@@ -35,7 +35,7 @@
     "aframe-event-decorators": "^1.0.2",
     "aframe-event-set-component": "^4.2.1",
     "aframe-geometry-merger-component": "^2.0.0-beta1",
-    "aframe-haptics-component": "^1.5.1",
+    "aframe-haptics-component": "^1.6.0",
     "aframe-layout-component": "^5.3.0",
     "aframe-log-component": "^1.0.7",
     "aframe-orbit-controls": "^1.2.0",
@@ -54,10 +54,12 @@
     "babel-preset-minify": "^0.5.0",
     "css-loader": "^0.28.7",
     "debug": "^4.1.0",
-    "firebase": "^5.9.2",
+    "firebase": "^7.19.0",
     "html-require-loader": "^1.0.1",
     "ip": "1.1.5",
     "json-loader": "^0.5.7",
+    "lodash.debounce": "^4.0.8",
+    "profane-words": "^1.3.1",
     "promise-polyfill": "^8.1.0",
     "style-loader": "^0.23.1",
     "super-nunjucks-loader": "^2.0.0",
@@ -88,7 +90,7 @@
     ]
   },
   "engines": {
-    "node": "<=11.15.0",
-    "npm": "<=6.7.0"
+    "node": "<=12.18.3",
+    "npm": "<=6.14.6"
   }
 }

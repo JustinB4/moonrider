@@ -133,6 +133,7 @@ AFRAME.registerState({
     playlistTitle: '',
     score: {
       accuracy: 100,  // Out of 100.
+      accuracyScore: 0,  // Raw number.
       accuracyInt: 100,  // Out of 100.
       active: false,
       beatsHit: 0,
@@ -173,6 +174,7 @@ AFRAME.registerState({
       if (state.damage > DAMAGE_DECAY) {
         state.damage -= DAMAGE_DECAY;
       }
+
       state.score.beatsHit++;
       state.score.combo++;
       if (state.score.combo > state.score.maxCombo) {
@@ -180,6 +182,7 @@ AFRAME.registerState({
       }
 
       payload.score = isNaN(payload.score) ? 100 : payload.score;
+      state.score.accuracyScore += payload.percent;
       state.score.score += Math.floor(payload.score);
       updateScoreAccuracy(state);
     },
@@ -369,6 +372,8 @@ AFRAME.registerState({
       state.isPaused = false;
       state.isVictory = false;
       state.menuActive = true;
+      state.menuSelectedChallenge.id = state.challenge.id;
+      state.menuSelectedChallenge.difficulty = state.challenge.difficulty;
       state.challenge.id = '';
       state.leaderboardQualified = false;
     },
@@ -418,7 +423,7 @@ AFRAME.registerState({
       for (let i = 0; i < payload.scores.length; i++) {
         let score = payload.scores[i];
         state.leaderboard.push(score);
-        state.leaderboardNames += `${score.username} (${score.accuracy || 0}%)\n`;
+        state.leaderboardNames += `#${i + 1} ${truncate(score.username, 18)} (${Math.round(score.accuracy || 0)}%)\n`;
         state.leaderboardScores += `${score.score}\n`;
       }
       state.leaderboardLoading = false;
@@ -433,7 +438,15 @@ AFRAME.registerState({
      * Insert new score into leaderboard locally.
      */
     leaderboardscoreadded: (state, payload) => {
-      state.leaderboard.splice(payload.index, 0, payload.scoreData);
+      // Insert.
+      for (let i = 0; i < state.leaderboard.length; i++) {
+        if (payload.scoreData.score >= state.leaderboard[i].score ||
+            i >= state.leaderboard.length - 1) {
+          state.leaderboard.splice(i, 0, payload.scoreData);
+          break;
+        }
+      }
+
       state.leaderboardNames = '';
       state.leaderboardScores = '';
       for (let i = 0; i < state.leaderboard.length; i++) {
@@ -651,15 +664,15 @@ AFRAME.registerState({
       state.score.finalAccuracy = state.score.accuracy;
 
       const accuracy = parseFloat(state.score.accuracy);
-      if (accuracy >= 90) {
+      if (accuracy >= 97) {
         state.score.rank = 'S';
-      } else if (accuracy >= 80) {
+      } else if (accuracy >= 90) {
         state.score.rank = 'A';
-      } else if (accuracy >= 60) {
+      } else if (accuracy >= 80) {
         state.score.rank = 'B';
-      } else if (accuracy >= 40) {
+      } else if (accuracy >= 70) {
         state.score.rank = 'C';
-      } else if (accuracy >= 30) {
+      } else if (accuracy >= 60) {
         state.score.rank = 'D';
       } else {
         state.score.rank = 'F';
@@ -837,6 +850,7 @@ function resetScore (state) {
   state.damage = 0;
   state.score.accuracy = 100;
   state.score.accuracyInt = 100;
+  state.score.accuracyScore = 0;
   state.score.beatsHit = 0;
   state.score.beatsMissed = 0;
   state.score.finalAccuracy = 100;
@@ -883,7 +897,7 @@ function updateMenuSongInfo (state, challenge) {
 function updateScoreAccuracy (state) {
   // Update live accuracy.
   const currentNumBeats = state.score.beatsHit + state.score.beatsMissed;
-  state.score.accuracy = (state.score.score / (currentNumBeats * 100)) * 100;
+  state.score.accuracy = (state.score.accuracyScore / (currentNumBeats * 100)) * 100;
   state.score.accuracy = state.score.accuracy.toFixed(2);
   state.score.accuracyInt = parseInt(state.score.accuracy);
 }
